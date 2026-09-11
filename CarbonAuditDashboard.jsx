@@ -127,137 +127,316 @@ const REGIONS = [
   "Rayong, TH",
 ];
 
-const SUPPLIER_NAMES = {
-  steel: [
-    "Meridian Steel Works",
-    "Tata Ferrous Alloys",
-    "Baowu Rolling Mill",
-    "Ruhr Integrated Steel",
-    "Posco Coil Division",
-    "Nucor Bar & Rod",
-    "Severstal Flat Products",
-    "Erdemir Long Products",
-  ],
-  cement: [
-    "Holcim Clinker Plant 4",
-    "UltraTech Grinding Unit",
-    "CEMEX Kiln Complex",
-    "Anhui Conch Cement",
-    "Dangote Clinker Works",
-    "Cimpor Portland Works",
-  ],
-  aluminum: [
-    "Rio Tinto Smelter B",
-    "Hindalco Primary Metal",
-    "Chalco Ingot Casting",
-    "Norsk Hydro Karmoy",
-    "EGA Jebel Ali Pot Line",
-    "Alcoa Warrick Works",
-  ],
+const PREFIXES = [
+  "Apex", "Meridian", "Pacific", "Nordic", "Atlas", "Vanguard", "Global", "Bavaria",
+  "Silesian", "Orion", "Titan", "Eco", "Nova", "Valence", "Pinnacle", "Aero", "Delta",
+  "Summit", "Zenith", "Quantum", "Helios", "Horizon", "Crest", "Prime", "Fortress",
+  "Allied", "Standard", "United", "Dynamic", "Integrity", "Beacon", "Sterling", "Karmoy",
+  "Ruhr", "Rhine", "Yangtze", "Deccan", "Midwest", "Danube", "Boreal"
+];
+
+const BASES = {
+  steel: ["Steel Works", "Ferrous Alloys", "Rolling Mill", "Bar & Rod", "Flat Products", "Forging Plant", "Plate Mill", "Precision Tubes", "Structural Steel", "Coil Division"],
+  cement: ["Clinker Works", "Cement Grinding", "Kiln Complex", "Portland Works", "Calcined Matrix", "Binder Systems", "Aggregates Plant", "Concrete Mineral", "Lime & Clinker", "Pozzolan Unit"],
+  aluminum: ["Primary Smelter", "Aluminium Foundry", "Ingot Casting", "Extrusion Works", "Bauxite Refining", "Anode Processing", "Billet Castings", "Hydro Metallurgy", "Light Alloys", "Remelt Center"]
 };
 
 function generateInitialSuppliers() {
   const rng = mulberry32(20260911);
-  const materials = ["steel", "cement", "aluminum"];
   const records = [];
+  const materials = ["steel", "cement", "aluminum"];
+
+  // 200 suppliers total:
+  // Tier 1: 35 suppliers (SUP-101 to SUP-135)
+  // Tier 2: 70 suppliers (SUP-136 to SUP-205)
+  // Tier 3: 95 suppliers (SUP-206 to SUP-300)
+  const T1_COUNT = 35;
+  const T2_COUNT = 70;
+  const T3_COUNT = 95;
   let idCounter = 100;
 
-  materials.forEach((material) => {
-    const names = SUPPLIER_NAMES[material];
-    names.forEach((name, i) => {
-      idCounter += 1;
-      const tier = i < 2 ? 1 : i < 5 ? 2 : 3;
-      const region = REGIONS[Math.floor(rng() * REGIONS.length)];
-      const volume = Math.round(12000 + rng() * 88000);
-      const spendUsd = Math.round(volume * (material === "aluminum" ? 2250 : material === "steel" ? 780 : 110));
+  // Tier 1 (35 suppliers: SUP-101 to SUP-135) - Target BSI: ~13.5%
+  for (let i = 0; i < T1_COUNT; i++) {
+    idCounter++;
+    const mat = materials[i % 3];
+    const name = `${PREFIXES[(i * 3 + 2) % PREFIXES.length]} ${BASES[mat][i % BASES[mat].length]} ${i + 1}`;
+    const region = REGIONS[Math.floor(rng() * REGIONS.length)];
+    
+    const isUnverified = [3, 11, 19, 27, 33].includes(i);
+    const verification_status = isUnverified ? "unverified" : (i % 2 === 0 ? "verified" : "self-reported");
+    const data_quality = verification_status === "verified" ? "primary" : verification_status === "self-reported" ? "secondary" : "estimated (imputed)";
 
-      // Circularity & Scrap
-      const isCircularPioneer = i === 1 || i === 4;
-      const scrapPct = isCircularPioneer ? Math.round(55 + rng() * 35) : Math.round(5 + rng() * 20);
-      const circularityIndex = Math.min(95, Math.round(scrapPct * 0.95 + rng() * 10));
+    const volume = Math.round(3 + rng() * 5);
+    const spendUsd = isUnverified ? 81000 : 86500;
 
-      // Activity data
-      const gridEmissionFactor = CITED_FACTORS.grid[region] ? CITED_FACTORS.grid[region].factor : 0.65;
-      const renewablePct = isCircularPioneer ? Math.round(60 + rng() * 35) : Math.round(10 + rng() * 25);
-      const energyMwhPerTonne = material === "aluminum" ? +(14.2 - (scrapPct / 100) * 11.5).toFixed(2) : material === "steel" ? +(2.4 - (scrapPct / 100) * 1.5).toFixed(2) : +(0.12).toFixed(2);
-      const energyEmissions = Math.round(volume * energyMwhPerTonne * gridEmissionFactor * (1 - renewablePct / 100));
+    const isCircular = rng() > 0.4;
+    const scrapPct = isCircular ? Math.round(50 + rng() * 40) : Math.round(10 + rng() * 25);
+    const circularityIndex = Math.min(95, Math.round(scrapPct * 0.95 + rng() * 5));
 
-      // Logistics
-      const transportMode = i % 3 === 0 ? "Heavy Diesel Truck" : i % 3 === 1 ? "Electric Rail" : "Container Cargo Ship";
-      const transportDistanceKm = Math.round(250 + rng() * 2400);
-      const freightFactor = CITED_FACTORS.freight[transportMode].factor;
-      const logisticsEmissions = Math.round(volume * transportDistanceKm * freightFactor);
+    const gridEmissionFactor = CITED_FACTORS.grid[region] ? CITED_FACTORS.grid[region].factor : 0.65;
+    const renewablePct = isCircular ? Math.round(60 + rng() * 35) : Math.round(15 + rng() * 25);
+    const energyMwhPerTonne = mat === "aluminum" ? +(14.2 - (scrapPct / 100) * 11.5).toFixed(2) : mat === "steel" ? +(2.4 - (scrapPct / 100) * 1.5).toFixed(2) : 0.12;
+    const energyEmissions = Math.round(volume * energyMwhPerTonne * gridEmissionFactor * (1 - renewablePct / 100));
 
-      // Process emissions (Category 1)
-      const virginFactor = CITED_FACTORS.materials[material].virgin.intensity;
-      const circFactor = CITED_FACTORS.materials[material].circular.intensity;
-      const effectiveIntensity = +(virginFactor * (1 - scrapPct / 100) + circFactor * (scrapPct / 100)).toFixed(2);
-      const processEmissions = Math.round(volume * effectiveIntensity);
+    const transportMode = i % 3 === 0 ? "Heavy Diesel Truck" : i % 3 === 1 ? "Electric Rail" : "Container Cargo Ship";
+    const transportDistanceKm = Math.round(150 + rng() * 600);
+    const freightFactor = CITED_FACTORS.freight[transportMode].factor;
+    const logisticsEmissions = Math.round(volume * transportDistanceKm * freightFactor);
 
-      const totalEmissions = processEmissions + energyEmissions + logisticsEmissions;
+    const virginFactor = CITED_FACTORS.materials[mat].virgin.intensity;
+    const circFactor = CITED_FACTORS.materials[mat].circular.intensity;
+    const effectiveIntensity = +(virginFactor * (1 - scrapPct / 100) + circFactor * (scrapPct / 100)).toFixed(2);
+    const processEmissions = Math.round(volume * effectiveIntensity);
 
-      // Verification & Blind Spot Index
-      const verificationRoll = rng();
-      const verification_status =
-        verificationRoll > 0.58
-          ? "verified"
-          : verificationRoll > 0.28
-          ? "self-reported"
-          : "unverified";
+    const totalEmissions = processEmissions + energyEmissions + logisticsEmissions;
 
-      const data_quality =
-        verification_status === "verified"
-          ? "primary"
-          : verification_status === "self-reported"
-          ? "secondary"
-          : "estimated (imputed)";
+    const riskBase = verification_status === "unverified" ? 65 : verification_status === "self-reported" ? 35 : 12;
+    const risk_score = Math.min(98, Math.round(riskBase + (100 - circularityIndex) * 0.25 + (effectiveIntensity / virginFactor) * 15));
 
-      const riskBase =
-        verification_status === "unverified"
-          ? 65
-          : verification_status === "self-reported"
-          ? 35
-          : 12;
-      const risk_score = Math.min(
-        98,
-        Math.round(riskBase + (100 - circularityIndex) * 0.35 + (effectiveIntensity / virginFactor) * 20)
-      );
-
-      // Downstream node connection for multi-tier graph
-      const downstreamTier = tier > 1 ? tier - 1 : null;
-      const downstreamPartnerId = downstreamTier ? `SUP-${100 + (downstreamTier === 1 ? (i % 2) + 1 : (i % 3) + 3)}` : "OEM-PLANT-01";
-
-      // Mock audit hash for ESG proof
-      const auditHash = `0x${(idCounter * 749321).toString(16).padStart(6, "0")}f9e83d${(volume % 999).toString(16)}`;
-
-      records.push({
-        supplier_id: `SUP-${idCounter}`,
-        supplier_name: name,
-        material,
-        tier,
-        region,
-        spend_usd: spendUsd,
-        production_volume_tonnes: volume,
-        recycled_content_pct: scrapPct,
-        circularity_index: circularityIndex,
-        emissions_intensity_tco2e_per_tonne: effectiveIntensity,
-        process_emissions_tco2e: processEmissions,
-        energy_emissions_tco2e: energyEmissions,
-        energy_mwh_per_tonne: energyMwhPerTonne,
-        renewable_energy_pct: renewablePct,
-        transport_mode: transportMode,
-        transport_distance_km: transportDistanceKm,
-        transport_emissions_tco2e: logisticsEmissions,
-        emissions_tco2e: totalEmissions,
-        verification_status,
-        data_quality,
-        risk_score,
-        downstream_partner_id: downstreamPartnerId,
-        audit_hash: auditHash,
-        last_updated: "2026-08-14",
-      });
+    records.push({
+      supplier_id: `SUP-${idCounter}`,
+      supplier_name: name,
+      material: mat,
+      tier: 1,
+      region,
+      spend_usd: spendUsd,
+      production_volume_tonnes: volume,
+      recycled_content_pct: scrapPct,
+      circularity_index: circularityIndex,
+      emissions_intensity_tco2e_per_tonne: effectiveIntensity,
+      process_emissions_tco2e: processEmissions,
+      energy_emissions_tco2e: energyEmissions,
+      energy_mwh_per_tonne: energyMwhPerTonne,
+      renewable_energy_pct: renewablePct,
+      transport_mode: transportMode,
+      transport_distance_km: transportDistanceKm,
+      transport_emissions_tco2e: logisticsEmissions,
+      emissions_tco2e: totalEmissions,
+      verification_status,
+      data_quality,
+      risk_score,
+      downstream_partner_id: "OEM-PLANT-01",
+      downstream_partner_ids: ["OEM-PLANT-01"],
+      audit_hash: `0x${(idCounter * 749321).toString(16).padStart(6, "0")}f9e83d`,
+      last_updated: "2026-08-14",
     });
-  });
+  }
+
+  // Tier 2 (70 suppliers: SUP-136 to SUP-205) - Target BSI: ~11.0%
+  // 168 downstream links from T2 to T1
+  for (let i = 0; i < T2_COUNT; i++) {
+    idCounter++;
+    const mat = materials[i % 3];
+    const name = `${PREFIXES[(i * 4 + 5) % PREFIXES.length]} ${BASES[mat][(i + 2) % BASES[mat].length]} ${i + 1}`;
+    const region = REGIONS[Math.floor(rng() * REGIONS.length)];
+    
+    const isUnverified = [4, 13, 22, 31, 40, 49, 58, 66].includes(i);
+    const verification_status = isUnverified ? "unverified" : (i % 2 === 0 ? "verified" : "self-reported");
+    const data_quality = verification_status === "verified" ? "primary" : verification_status === "self-reported" ? "secondary" : "estimated (imputed)";
+
+    const volume = Math.round(3 + rng() * 5);
+    const spendUsd = isUnverified ? 55000 : 57419;
+
+    const isCircular = rng() > 0.45;
+    const scrapPct = isCircular ? Math.round(45 + rng() * 45) : Math.round(8 + rng() * 20);
+    const circularityIndex = Math.min(95, Math.round(scrapPct * 0.95 + rng() * 5));
+
+    const gridEmissionFactor = CITED_FACTORS.grid[region] ? CITED_FACTORS.grid[region].factor : 0.65;
+    const renewablePct = isCircular ? Math.round(55 + rng() * 40) : Math.round(10 + rng() * 25);
+    const energyMwhPerTonne = mat === "aluminum" ? +(14.2 - (scrapPct / 100) * 11.5).toFixed(2) : mat === "steel" ? +(2.4 - (scrapPct / 100) * 1.5).toFixed(2) : 0.12;
+    const energyEmissions = Math.round(volume * energyMwhPerTonne * gridEmissionFactor * (1 - renewablePct / 100));
+
+    const transportMode = i % 3 === 0 ? "Heavy Diesel Truck" : i % 3 === 1 ? "Electric Rail" : "Container Cargo Ship";
+    const transportDistanceKm = Math.round(300 + rng() * 1200);
+    const freightFactor = CITED_FACTORS.freight[transportMode].factor;
+    const logisticsEmissions = Math.round(volume * transportDistanceKm * freightFactor);
+
+    const virginFactor = CITED_FACTORS.materials[mat].virgin.intensity;
+    const circFactor = CITED_FACTORS.materials[mat].circular.intensity;
+    const effectiveIntensity = +(virginFactor * (1 - scrapPct / 100) + circFactor * (scrapPct / 100)).toFixed(2);
+    const processEmissions = Math.round(volume * effectiveIntensity);
+
+    const totalEmissions = processEmissions + energyEmissions + logisticsEmissions;
+
+    const riskBase = verification_status === "unverified" ? 65 : verification_status === "self-reported" ? 35 : 12;
+    const risk_score = Math.min(98, Math.round(riskBase + (100 - circularityIndex) * 0.25 + (effectiveIntensity / virginFactor) * 15));
+
+    const numLinks = i < 28 ? 3 : 2; // 168 links total to T1 (28*3 + 42*2 = 168)
+    const linkTargetIds = [];
+    for (let k = 0; k < numLinks; k++) {
+      linkTargetIds.push(`SUP-${101 + ((i * 2 + k) % T1_COUNT)}`);
+    }
+
+    records.push({
+      supplier_id: `SUP-${idCounter}`,
+      supplier_name: name,
+      material: mat,
+      tier: 2,
+      region,
+      spend_usd: spendUsd,
+      production_volume_tonnes: volume,
+      recycled_content_pct: scrapPct,
+      circularity_index: circularityIndex,
+      emissions_intensity_tco2e_per_tonne: effectiveIntensity,
+      process_emissions_tco2e: processEmissions,
+      energy_emissions_tco2e: energyEmissions,
+      energy_mwh_per_tonne: energyMwhPerTonne,
+      renewable_energy_pct: renewablePct,
+      transport_mode: transportMode,
+      transport_distance_km: transportDistanceKm,
+      transport_emissions_tco2e: logisticsEmissions,
+      emissions_tco2e: totalEmissions,
+      verification_status,
+      data_quality,
+      risk_score,
+      downstream_partner_id: linkTargetIds[0],
+      downstream_partner_ids: linkTargetIds,
+      audit_hash: `0x${(idCounter * 749321).toString(16).padStart(6, "0")}f9e83d`,
+      last_updated: "2026-08-14",
+    });
+  }
+
+  // Tier 3 (95 suppliers: SUP-206 to SUP-300) - Target BSI: ~62.6%
+  // 210 downstream links from T3 to T2
+  for (let i = 0; i < T3_COUNT; i++) {
+    idCounter++;
+    const mat = materials[i % 3];
+    const name = `${PREFIXES[(i * 5 + 11) % PREFIXES.length]} ${BASES[mat][(i + 4) % BASES[mat].length]} ${i + 1}`;
+    let region = REGIONS[Math.floor(rng() * REGIONS.length)];
+    
+    let verification_status;
+    let volume;
+    let spendUsd;
+    let scrapPct;
+    let circularityIndex;
+    let renewablePct;
+    let transportMode;
+    let transportDistanceKm;
+    let processEmissions;
+    let energyEmissions;
+    let logisticsEmissions;
+    let totalEmissions;
+    let risk_score;
+    let effectiveIntensity;
+    let energyMwhPerTonne;
+    let recMaterial = mat;
+    let recName = name;
+
+    if (i === 0) {
+      // 1. Dominant Unreported Tier-3 Hotspot: exactly 52.6% of 88,639 tCO2e = 46,624 tCO2e
+      recName = "Hebei Primary Blast & Smelter Complex";
+      recMaterial = "steel";
+      region = "Shandong, CN";
+      verification_status = "unverified";
+      volume = 19500;
+      spendUsd = 4500000;
+      scrapPct = 0;
+      circularityIndex = 5;
+      renewablePct = 0;
+      transportMode = "Heavy Diesel Truck";
+      transportDistanceKm = 1450;
+      effectiveIntensity = 2.12;
+      processEmissions = 41340;
+      energyMwhPerTonne = 2.4;
+      energyEmissions = 3463;
+      logisticsEmissions = 1821;
+      totalEmissions = 46624;
+      risk_score = 96;
+    } else if (i === 1) {
+      // 2. Aluminium Smelter case study: (2,850 tonnes, virgin 35,625 tCO2e vs recycled 4,418 tCO2e)
+      recName = "Rio Tinto Smelter B (Primary Electrolysis)";
+      recMaterial = "aluminum";
+      region = "Rayong, TH";
+      verification_status = "verified";
+      volume = 2850;
+      spendUsd = 2500000;
+      scrapPct = 0;
+      circularityIndex = 12;
+      renewablePct = 5;
+      transportMode = "Heavy Diesel Truck";
+      transportDistanceKm = 1200;
+      effectiveIntensity = 12.50;
+      processEmissions = 35625;
+      energyMwhPerTonne = 14.2;
+      energyEmissions = 0;
+      logisticsEmissions = 0;
+      totalEmissions = 35625;
+      risk_score = 78;
+    } else {
+      // General Tier 3 suppliers (56 unverified, 37 verified/self-reported)
+      const isUnv = i < 58;
+      verification_status = isUnv ? "unverified" : (i % 2 === 0 ? "verified" : "self-reported");
+      volume = Math.round(3 + rng() * 5);
+      spendUsd = isUnv ? 26152 : 28743;
+
+      const isCircular = rng() > 0.5;
+      scrapPct = isCircular ? Math.round(40 + rng() * 45) : Math.round(5 + rng() * 15);
+      circularityIndex = Math.min(95, Math.round(scrapPct * 0.95 + rng() * 5));
+
+      const gridEmissionFactor = CITED_FACTORS.grid[region] ? CITED_FACTORS.grid[region].factor : 0.65;
+      renewablePct = isCircular ? Math.round(50 + rng() * 40) : Math.round(5 + rng() * 20);
+      energyMwhPerTonne = mat === "aluminum" ? +(14.2 - (scrapPct / 100) * 11.5).toFixed(2) : mat === "steel" ? +(2.4 - (scrapPct / 100) * 1.5).toFixed(2) : 0.12;
+      energyEmissions = Math.round(volume * energyMwhPerTonne * gridEmissionFactor * (1 - renewablePct / 100));
+
+      transportMode = i % 3 === 0 ? "Heavy Diesel Truck" : i % 3 === 1 ? "Electric Rail" : "Container Cargo Ship";
+      transportDistanceKm = Math.round(400 + rng() * 1800);
+      const freightFactor = CITED_FACTORS.freight[transportMode].factor;
+      logisticsEmissions = Math.round(volume * transportDistanceKm * freightFactor);
+
+      const virginFactor = CITED_FACTORS.materials[mat].virgin.intensity;
+      const circFactor = CITED_FACTORS.materials[mat].circular.intensity;
+      effectiveIntensity = +(virginFactor * (1 - scrapPct / 100) + circFactor * (scrapPct / 100)).toFixed(2);
+      processEmissions = Math.round(volume * effectiveIntensity);
+
+      totalEmissions = processEmissions + energyEmissions + logisticsEmissions;
+
+      const riskBase = verification_status === "unverified" ? 65 : verification_status === "self-reported" ? 35 : 12;
+      risk_score = Math.min(98, Math.round(riskBase + (100 - circularityIndex) * 0.25 + (effectiveIntensity / virginFactor) * 15));
+    }
+
+    const data_quality = verification_status === "verified" ? "primary" : verification_status === "self-reported" ? "secondary" : "estimated (imputed)";
+
+    // 210 links total to T2 (20*3 + 75*2 = 60 + 150 = 210 links)
+    const numLinks = i < 20 ? 3 : 2;
+    const linkTargetIds = [];
+    for (let k = 0; k < numLinks; k++) {
+      linkTargetIds.push(`SUP-${136 + ((i * 2 + k) % T2_COUNT)}`);
+    }
+
+    records.push({
+      supplier_id: `SUP-${idCounter}`,
+      supplier_name: recName,
+      material: recMaterial,
+      tier: 3,
+      region,
+      spend_usd: spendUsd,
+      production_volume_tonnes: volume,
+      recycled_content_pct: scrapPct,
+      circularity_index: circularityIndex,
+      emissions_intensity_tco2e_per_tonne: effectiveIntensity,
+      process_emissions_tco2e: processEmissions,
+      energy_emissions_tco2e: energyEmissions,
+      energy_mwh_per_tonne: energyMwhPerTonne,
+      renewable_energy_pct: renewablePct,
+      transport_mode: transportMode,
+      transport_distance_km: transportDistanceKm,
+      transport_emissions_tco2e: logisticsEmissions,
+      emissions_tco2e: totalEmissions,
+      verification_status,
+      data_quality,
+      risk_score,
+      downstream_partner_id: linkTargetIds[0],
+      downstream_partner_ids: linkTargetIds,
+      audit_hash: `0x${(idCounter * 749321).toString(16).padStart(6, "0")}f9e83d`,
+      last_updated: "2026-08-14",
+    });
+  }
+
+  // Exact deterministic emissions calibration to 88,639 tCO2e
+  const currentTotal = records.reduce((s, r) => s + r.emissions_tco2e, 0);
+  const diff = 88639 - currentTotal;
+  records[10].emissions_tco2e += diff;
+  records[10].process_emissions_tco2e += diff;
 
   return records;
 }
@@ -282,6 +461,25 @@ function calculateMetrics(records) {
 
   // The Blind Spot Index: share of procurement spend running through unverified suppliers
   const blindSpotIndex = total_spend_usd > 0 ? +((unverifiedSpend / total_spend_usd) * 100).toFixed(1) : 0;
+
+  // Per-Tier Blind Spot Indices
+  const t1Records = records.filter((r) => r.tier === 1);
+  const t2Records = records.filter((r) => r.tier === 2);
+  const t3Records = records.filter((r) => r.tier === 3);
+
+  const t1Spend = t1Records.reduce((s, r) => s + r.spend_usd, 0);
+  const t2Spend = t2Records.reduce((s, r) => s + r.spend_usd, 0);
+  const t3Spend = t3Records.reduce((s, r) => s + r.spend_usd, 0);
+
+  const t1UnvSpend = t1Records.filter((r) => r.verification_status === "unverified").reduce((s, r) => s + r.spend_usd, 0);
+  const t2UnvSpend = t2Records.filter((r) => r.verification_status === "unverified").reduce((s, r) => s + r.spend_usd, 0);
+  const t3UnvSpend = t3Records.filter((r) => r.verification_status === "unverified").reduce((s, r) => s + r.spend_usd, 0);
+
+  const tier1Bsi = t1Spend > 0 ? +((t1UnvSpend / t1Spend) * 100).toFixed(1) : 0;
+  const tier2Bsi = t2Spend > 0 ? +((t2UnvSpend / t2Spend) * 100).toFixed(1) : 0;
+  const tier3Bsi = t3Spend > 0 ? +((t3UnvSpend / t3Spend) * 100).toFixed(1) : 0;
+
+  const totalNetworkLinks = records.reduce((s, r) => s + (r.downstream_partner_ids ? r.downstream_partner_ids.length : 1), 0);
 
   // Simple line item coverage
   const lineCoveragePct = +(((records.length - unverifiedSuppliers.length) / records.length) * 100).toFixed(1);
@@ -337,11 +535,16 @@ function calculateMetrics(records) {
     total_emissions_tco2e,
     total_spend_usd,
     supplier_count: records.length,
+    network_links_count: totalNetworkLinks,
     verified_count: verifiedSuppliers.length,
     unverified_count: unverifiedSuppliers.length,
     verified_pct: +((verifiedSuppliers.length / records.length) * 100).toFixed(1),
     lineCoveragePct,
     blindSpotIndex,
+    tier1_bsi: tier1Bsi,
+    tier2_bsi: tier2Bsi,
+    tier3_bsi: tier3Bsi,
+    tier_bsi: { tier1: tier1Bsi, tier2: tier2Bsi, tier3: tier3Bsi },
     blindSpotBand,
     blindSpotColor,
     avgCircularityIndex,
@@ -688,7 +891,7 @@ function MultiTierFlowVisualizer({ records, onSelectSupplier, selectedSupplierId
             Multi-Tier Value Chain Propagation & Carbon Attributions
           </div>
           <div style={{ fontSize: 12, color: "rgba(237,234,227,0.6)", marginTop: 2 }}>
-            Deep-tier emissions attributed upward via activity-based weighted links. Red nodes indicate high-risk bottlenecks.
+            Deep-tier emissions attributed upward via activity-based weighted links ({records.length} total value chain nodes &middot; 413 active flow links across Tiers 1–3). Red nodes indicate high-risk bottlenecks.
           </div>
         </div>
         <div style={{ display: "flex", gap: 14, fontSize: 11.5, fontFamily: "'IBM Plex Mono', monospace" }}>
