@@ -1,0 +1,32 @@
+{
+  "version": "2026.1",
+  "note": "Factors are representative values for prototype use. Replace with the exact figures from the cited publications before any real reporting.",
+  "electricity_kgco2e_per_kwh": {
+    "IN": {"value": 0.716, "source": "CEA CO2 Baseline Database, India", "year": 2023, "url": "https://cea.nic.in/cdm-co2-baseline-database/"},
+    "CN": {"value": 0.581, "source": "IEA Emission Factors", "year": 2023, "url": "https://www.iea.org/data-and-statistics"},
+    "DE": {"value": 0.380, "source": "IEA Emission Factors", "year": 2023, "url": "https://www.iea.org/data-and-statistics"},
+    "US": {"value": 0.371, "source": "US EPA eGRID", "year": 2023, "url": "https://www.epa.gov/egrid"},
+    "VN": {"value": 0.640, "source": "IEA Emission Factors", "year": 2023, "url": "https://www.iea.org/data-and-statistics"},
+    "AU": {"value": 0.660, "source": "Australian National Greenhouse Accounts Factors", "year": 2023, "url": "https://www.dcceew.gov.au/climate-change/publications/national-greenhouse-accounts-factors"}
+  },
+  "materials_kgco2e_per_kg": {
+    "virgin_aluminium": {"value": 12.50, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_aluminium"},
+    "recycled_aluminium": {"value": 1.55, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "virgin_steel": {"value": 2.46, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_steel"},
+    "recycled_steel": {"value": 0.70, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "virgin_plastic_pet": {"value": 3.27, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_plastic_pet"},
+    "recycled_plastic_pet": {"value": 1.05, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "copper": {"value": 3.98, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_copper"},
+    "recycled_copper": {"value": 1.20, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "glass": {"value": 1.40, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_glass"},
+    "recycled_glass": {"value": 0.58, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "cardboard": {"value": 0.82, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting", "circular_alternative": "recycled_cardboard"},
+    "recycled_cardboard": {"value": 0.34, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"}
+  },
+  "transport_kgco2e_per_tonne_km": {
+    "air_freight": {"value": 0.602, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "road_hgv": {"value": 0.107, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "rail_freight": {"value": 0.028, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"},
+    "sea_freight": {"value": 0.016, "source": "UK DEFRA Greenhouse Gas Conversion Factors", "year": 2024, "url": "https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting"}
+  }
+}

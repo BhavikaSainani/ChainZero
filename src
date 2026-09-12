@@ -1,0 +1,1742 @@
+import React, { useMemo, useState, useEffect } from "react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+} from "recharts";
+
+/* ------------------------------------------------------------------ */
+/*  Design tokens & Projector-Hardened Theme                          */
+/*  (Body text >= 14px, no grey lighter than #4A4A4A)                 */
+/* ------------------------------------------------------------------ */
+
+const COLOR = {
+  concrete: "#EDEAE3",
+  concreteLight: "#F5F3EF",
+  concreteDim: "#E2DED4",
+  panel: "#F9F8F5",
+  cardBg: "#FFFFFF",
+  ink: "#211F1B",
+  inkSoft: "#3A362F",
+  inkMuted: "#4A4A4A", // Projector hardened: strictly >= #4A4A4A
+  rust: "#A8471F",
+  rustBright: "#C85728",
+  teal: "#245A47",
+  tealBright: "#2D7D64",
+  steel: "#4A4A4A",
+  brick: "#8C2F1B",
+  brickLight: "rgba(140, 47, 27, 0.12)",
+  amber: "#996200",
+  amberLight: "rgba(184, 120, 24, 0.15)",
+  blueDim: "#2A4B63",
+  hairline: "rgba(33,31,27,0.18)",
+  hairlineStrong: "rgba(33,31,27,0.35)",
+  hairlineOnDark: "rgba(237,234,227,0.25)",
+};
+
+const MATERIAL_COLOR = {
+  virgin_steel: "#5C6773",
+  recycled_steel: "#3A7D6E",
+  virgin_aluminium: "#4E7C74",
+  recycled_aluminium: "#2D7D64",
+  virgin_plastic_pet: "#8A5D43",
+  recycled_plastic_pet: "#4A7C59",
+  cardboard: "#9E8E78",
+  glass: "#4B6B94",
+  copper: "#B86B35",
+};
+
+const MATERIAL_LABEL = {
+  virgin_steel: "Virgin Steel",
+  recycled_steel: "Recycled Steel",
+  virgin_aluminium: "Virgin Aluminium",
+  recycled_aluminium: "Recycled Aluminium",
+  virgin_plastic_pet: "Virgin Plastic (PET)",
+  recycled_plastic_pet: "Recycled Plastic (PET)",
+  cardboard: "Cardboard",
+  glass: "Glass",
+  copper: "Copper",
+};
+
+const TRANSPORT_LABEL = {
+  air_freight: "Air Freight",
+  road_hgv: "Road HGV",
+  rail_freight: "Rail Freight",
+  sea_freight: "Sea Freight",
+};
+
+function formatNumber(n) {
+  return new Intl.NumberFormat("en-US").format(Math.round(n || 0));
+}
+
+function formatDec(n, decimals = 1) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n || 0);
+}
+
+function formatCurrency(n) {
+  return "$" + new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n || 0);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading Skeleton Component                                         */
+/* ------------------------------------------------------------------ */
+
+function LoadingSkeleton() {
+  return (
+    <div style={{ background: COLOR.concrete, minHeight: "100vh", padding: "32px", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+      <div style={{ background: COLOR.ink, padding: "32px", borderRadius: "6px", marginBottom: "24px" }}>
+        <div style={{ height: "18px", width: "260px", background: "rgba(237,234,227,0.2)", borderRadius: "4px", marginBottom: "16px" }} />
+        <div style={{ height: "48px", width: "380px", background: "rgba(237,234,227,0.15)", borderRadius: "4px", marginBottom: "20px" }} />
+        <div style={{ height: "80px", width: "100%", background: "rgba(237,234,227,0.1)", borderRadius: "4px" }} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "24px" }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ background: COLOR.cardBg, border: `1px solid ${COLOR.hairline}`, padding: "24px", borderRadius: "6px", height: "140px" }}>
+            <div style={{ height: "16px", width: "60%", background: COLOR.concreteDim, borderRadius: "4px", marginBottom: "12px" }} />
+            <div style={{ height: "32px", width: "80%", background: COLOR.concreteLight, borderRadius: "4px" }} />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: COLOR.cardBg, border: `1px solid ${COLOR.hairline}`, borderRadius: "6px", padding: "32px", height: "420px" }}>
+        <div style={{ height: "20px", width: "300px", background: COLOR.concreteDim, borderRadius: "4px", marginBottom: "24px" }} />
+        <div style={{ height: "300px", width: "100%", background: COLOR.concreteLight, borderRadius: "6px" }} />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fetch Error Banner Component                                       */
+/* ------------------------------------------------------------------ */
+
+function ErrorDisplay({ message, onRetry }) {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLOR.concrete, padding: "24px" }}>
+      <div style={{ background: COLOR.cardBg, border: `2px solid ${COLOR.brick}`, padding: "36px", borderRadius: "8px", maxWidth: "600px", width: "100%", boxShadow: "0 12px 36px rgba(0,0,0,0.15)" }}>
+        <div style={{ fontSize: "14px", fontWeight: 700, color: COLOR.brick, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Ingestion Failure &middot; Missing Data Source
+        </div>
+        <div style={{ fontSize: "22px", fontWeight: 700, color: COLOR.ink, marginTop: "8px" }}>
+          Unable to Load dashboard.json
+        </div>
+        <div style={{ fontSize: "15px", color: COLOR.inkMuted, marginTop: "12px", lineHeight: 1.6 }}>
+          {message || "The static supply chain data file could not be read. Please ensure public/dashboard.json exists and is reachable."}
+        </div>
+        <div style={{ marginTop: "24px", display: "flex", gap: "12px" }}>
+          <button
+            onClick={onRetry}
+            style={{
+              padding: "12px 24px",
+              background: COLOR.ink,
+              color: COLOR.concrete,
+              border: "none",
+              borderRadius: "4px",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Retry Fetch
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section 1: Audit Drill-Down Panel / Modal                          */
+/* ------------------------------------------------------------------ */
+
+function AuditProvenanceModal({ supplier, isOpen, onClose }) {
+  if (!isOpen || !supplier) return null;
+
+  const lines = supplier.auditLines || [];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(20, 18, 16, 0.8)",
+        backdropFilter: "blur(4px)",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          background: COLOR.cardBg,
+          maxWidth: "880px",
+          width: "100%",
+          maxHeight: "92vh",
+          borderRadius: "6px",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
+          overflow: "hidden",
+          border: `1px solid ${COLOR.hairlineStrong}`,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            background: COLOR.ink,
+            padding: "20px 28px",
+            color: COLOR.concrete,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "14px", letterSpacing: "0.08em", color: COLOR.rustBright, textTransform: "uppercase", fontWeight: 700 }}>
+              ESG Audit Provenance &middot; Scope 3 Activity Ledger
+            </div>
+            <div style={{ fontSize: "20px", fontWeight: 700, marginTop: "4px" }}>
+              {supplier.name} ({supplier.id})
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close modal"
+            style={{
+              background: "transparent",
+              border: `1px solid ${COLOR.hairlineOnDark}`,
+              color: COLOR.concrete,
+              fontSize: "18px",
+              cursor: "pointer",
+              padding: "6px 14px",
+              borderRadius: "4px",
+            }}
+          >
+            &times; Close
+          </button>
+        </div>
+
+        {/* Supplier Profile Bar */}
+        <div
+          style={{
+            background: COLOR.concreteLight,
+            padding: "16px 28px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+            gap: "14px",
+            borderBottom: `1px solid ${COLOR.hairline}`,
+            fontSize: "14px",
+          }}
+        >
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Supply Tier</div>
+            <div style={{ fontWeight: 700, color: COLOR.ink, marginTop: "2px" }}>Tier {supplier.tier}</div>
+          </div>
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Country</div>
+            <div style={{ fontWeight: 700, color: COLOR.ink, marginTop: "2px" }}>{supplier.country}</div>
+          </div>
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Material</div>
+            <div style={{ fontWeight: 700, color: COLOR.ink, marginTop: "2px" }}>
+              {MATERIAL_LABEL[supplier.material] || supplier.material}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Annual Spend</div>
+            <div style={{ fontWeight: 700, color: COLOR.ink, marginTop: "2px" }}>
+              {formatCurrency(supplier.spendUsd)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Direct Footprint</div>
+            <div style={{ fontWeight: 700, color: COLOR.rust, marginTop: "2px", fontFamily: "'IBM Plex Mono', monospace" }}>
+              {formatDec(supplier.directTco2e)} tCO2e
+            </div>
+          </div>
+          <div>
+            <div style={{ color: COLOR.inkMuted, fontSize: "14px", textTransform: "uppercase", fontWeight: 600 }}>Rolled-up Footprint</div>
+            <div style={{ fontWeight: 700, color: COLOR.teal, marginTop: "2px", fontFamily: "'IBM Plex Mono', monospace" }}>
+              {formatDec(supplier.rolledUpTco2e)} tCO2e
+            </div>
+          </div>
+        </div>
+
+        {/* Audit Lines Container */}
+        <div style={{ padding: "24px 28px", overflowY: "auto", flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div style={{ fontSize: "16px", fontWeight: 700, color: COLOR.ink }}>
+              Activity Audit Lines ({lines.length} categories traced)
+            </div>
+            <div style={{ fontSize: "14px", color: COLOR.inkMuted }}>
+              Reporting Status:{" "}
+              <strong style={{ color: supplier.reports ? COLOR.tealBright : COLOR.brick }}>
+                {supplier.reports ? "Self-Reported" : "Unreported"}
+              </strong>{" "}
+              &middot; Energy:{" "}
+              <strong style={{ color: supplier.energyImputed ? COLOR.rust : COLOR.tealBright }}>
+                {supplier.energyImputed ? "Imputed via Grid Proxy" : "Direct Metered"}
+              </strong>
+            </div>
+          </div>
+
+          {lines.length === 0 ? (
+            <div style={{ padding: "32px", textAlign: "center", color: COLOR.inkMuted, fontSize: "15px" }}>
+              No audit lines recorded for this node.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {lines.map((line, idx) => {
+                const isImputed =
+                  line.data_quality === "imputed" ||
+                  line.data_quality === "estimated (imputed)";
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      border: `1px solid ${COLOR.hairlineStrong}`,
+                      borderRadius: "6px",
+                      background: COLOR.panel,
+                      padding: "18px 20px",
+                    }}
+                  >
+                    {/* Top Row: Category, Quality Badge, kgCO2e */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "15px", fontWeight: 700, color: COLOR.ink }}>
+                          {line.category}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            padding: "3px 10px",
+                            borderRadius: "3px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.04em",
+                            background: isImputed ? COLOR.amberLight : "rgba(45, 125, 100, 0.15)",
+                            color: isImputed ? COLOR.rustBright : COLOR.tealBright,
+                            border: `1px solid ${isImputed ? COLOR.rust : COLOR.tealBright}`,
+                          }}
+                        >
+                          {isImputed ? "DATA QUALITY: IMPUTED" : "DATA QUALITY: REPORTED"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "16px", fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: COLOR.ink }}>
+                        {formatDec(line.kgco2e / 1000, 2)} tCO2e{" "}
+                        <span style={{ fontSize: "14px", fontWeight: 500, color: COLOR.inkMuted }}>
+                          ({formatNumber(line.kgco2e)} kgCO2e)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Activity & Factor Table */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                        gap: "12px",
+                        background: COLOR.cardBg,
+                        padding: "12px 16px",
+                        borderRadius: "4px",
+                        border: `1px solid ${COLOR.hairline}`,
+                        fontSize: "14px",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: COLOR.inkMuted, fontSize: "13px", fontWeight: 600 }}>Activity Value</div>
+                        <div style={{ fontWeight: 600, color: COLOR.ink, marginTop: "2px", fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {formatDec(line.activity_value, 2)} {line.activity_unit}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: COLOR.inkMuted, fontSize: "13px", fontWeight: 600 }}>Emission Factor</div>
+                        <div style={{ fontWeight: 600, color: COLOR.ink, marginTop: "2px", fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {line.factor_value} {line.factor_unit}
+                        </div>
+                      </div>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <div style={{ color: COLOR.inkMuted, fontSize: "13px", fontWeight: 600 }}>Factor Source & Vintage</div>
+                        <div style={{ marginTop: "2px" }}>
+                          <a
+                            href={line.factor_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              color: COLOR.rustBright,
+                              fontWeight: 600,
+                              textDecoration: "underline",
+                              wordBreak: "break-all",
+                              fontSize: "14px",
+                            }}
+                          >
+                            {line.factor_source} ({line.factor_year}) &rarr; View Public Methodology
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Formula verbatim */}
+                    <div style={{ marginTop: "8px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: COLOR.inkMuted, marginBottom: "4px" }}>
+                        Calculation Formula (Verbatim):
+                      </div>
+                      <div
+                        style={{
+                          background: "#211F1B",
+                          color: "#F5F3EF",
+                          padding: "10px 14px",
+                          borderRadius: "4px",
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: "14px",
+                          overflowX: "auto",
+                          border: `1px solid ${COLOR.hairlineStrong}`,
+                        }}
+                      >
+                        {line.formula}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section 2: Blind Spot Panel Component                             */
+/* ------------------------------------------------------------------ */
+
+function BlindSpotPanel({ blindSpot }) {
+  if (!blindSpot) return null;
+
+  const bsiPct = +(blindSpot.index * 100).toFixed(1);
+  const lineCoveragePct = +(blindSpot.lineCoverage * 100).toFixed(1);
+
+  // Parse byTier: keys "1", "2", "3", "4"
+  const tierData = Object.entries(blindSpot.byTier || {}).map(([tierKey, val]) => {
+    const tierBsi = +(val.bsi * 100).toFixed(1);
+    return {
+      tierLabel: `Tier ${tierKey}`,
+      tier: tierKey,
+      bsi: tierBsi,
+      suppliers: val.suppliers,
+      suppliersWithGaps: val.suppliers_with_gaps,
+    };
+  });
+
+  // Identify worst tier (highest bsi)
+  const maxBsi = Math.max(...tierData.map((t) => t.bsi), 0);
+
+  return (
+    <div
+      style={{
+        background: "#161513",
+        border: `1px solid ${COLOR.rust}`,
+        borderRadius: "6px",
+        padding: "24px 28px",
+        color: COLOR.concrete,
+        marginTop: "20px",
+        marginBottom: "24px",
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "28px", alignItems: "center" }}>
+        {/* Left Column: Big Percentage, Band, and Contrast Line */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "0.08em", color: COLOR.rustBright, textTransform: "uppercase" }}>
+              Scope 3 Assurance &middot; The Blind Spot Index
+            </span>
+            <span
+              style={{
+                fontSize: "14px",
+                fontWeight: 700,
+                padding: "4px 12px",
+                borderRadius: "3px",
+                background: COLOR.brick,
+                color: "#FFF",
+                textTransform: "uppercase",
+              }}
+            >
+              Band: {blindSpot.band}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "baseline", gap: "16px", marginTop: "10px" }}>
+            <div
+              style={{
+                fontSize: "clamp(36px, 5vw, 54px)",
+                fontWeight: 800,
+                fontFamily: "'IBM Plex Mono', monospace",
+                color: COLOR.rustBright,
+                lineHeight: 1,
+              }}
+            >
+              {bsiPct}%
+            </div>
+            <div style={{ fontSize: "16px", color: COLOR.concreteDim, fontWeight: 500 }}>
+              of procurement spend is unverified
+            </div>
+          </div>
+
+          {/* Contrast Line */}
+          <div
+            style={{
+              marginTop: "16px",
+              padding: "14px 18px",
+              background: "rgba(237,234,227,0.08)",
+              borderLeft: `4px solid ${COLOR.rustBright}`,
+              borderRadius: "0 4px 4px 0",
+              fontSize: "15px",
+              lineHeight: 1.5,
+              color: COLOR.concrete,
+            }}
+          >
+            <strong>Contrast Metric:</strong> Line item coverage reads{" "}
+            <span style={{ color: COLOR.tealBright, fontWeight: 700 }}>{lineCoveragePct}%</span>, yet{" "}
+            <span style={{ color: COLOR.rustBright, fontWeight: 700 }}>{bsiPct}%</span> of total supply chain spend runs through suppliers with unverified, missing, or proxy-estimated emission data.
+          </div>
+        </div>
+
+        {/* Right Column: Bar Chart of byTier BSI values */}
+        <div style={{ background: "rgba(33, 31, 27, 0.6)", padding: "18px 20px", borderRadius: "6px", border: `1px solid ${COLOR.hairlineOnDark}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: COLOR.concrete }}>
+              Blind Spot Index by Tier (Worst Tier Highlighted)
+            </span>
+            <span style={{ fontSize: "13px", color: COLOR.concreteDim }}>
+              Deep-tier data quality drop-off
+            </span>
+          </div>
+
+          <div style={{ height: "160px", width: "100%" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tierData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="rgba(237,234,227,0.12)" />
+                <XAxis dataKey="tierLabel" tick={{ fill: COLOR.concrete, fontSize: 13, fontFamily: "IBM Plex Sans" }} axisLine={{ stroke: "rgba(237,234,227,0.2)" }} />
+                <YAxis unit="%" tick={{ fill: COLOR.concreteDim, fontSize: 13, fontFamily: "IBM Plex Mono" }} domain={[0, 70]} axisLine={{ stroke: "rgba(237,234,227,0.2)" }} />
+                <Tooltip
+                  formatter={(val, name, item) => [
+                    `${val}% BSI (${item.payload.suppliersWithGaps} of ${item.payload.suppliers} suppliers have gaps)`,
+                    "Blind Spot",
+                  ]}
+                  contentStyle={{
+                    background: COLOR.ink,
+                    borderColor: COLOR.hairlineStrong,
+                    color: COLOR.concrete,
+                    fontSize: "14px",
+                    borderRadius: "4px",
+                  }}
+                />
+                <Bar dataKey="bsi" radius={[4, 4, 0, 0]}>
+                  {tierData.map((entry, index) => {
+                    const isWorst = entry.bsi === maxBsi && entry.bsi > 0;
+                    return (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={isWorst ? COLOR.rustBright : "#4A7C74"}
+                        stroke={isWorst ? "#FFF" : "transparent"}
+                        strokeWidth={isWorst ? 1.5 : 0}
+                      />
+                    );
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section 3: Graph Readability at 200 Nodes                          */
+/* ------------------------------------------------------------------ */
+
+function MultiTierFlowVisualizer({ nodes, edges, onSelectSupplier, selectedSupplierId }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedTier3, setExpandedTier3] = useState({});
+  const [expandAllT4, setExpandAllT4] = useState(false);
+
+  // Group nodes by tier
+  const tier1Nodes = useMemo(() => nodes.filter((n) => n.tier === 1), [nodes]);
+  const tier2Nodes = useMemo(() => nodes.filter((n) => n.tier === 2), [nodes]);
+  const tier3Nodes = useMemo(() => nodes.filter((n) => n.tier === 3), [nodes]);
+  const tier4Nodes = useMemo(() => nodes.filter((n) => n.tier === 4), [nodes]);
+
+  // Map Tier 4 nodes to their parent Tier 3 nodes
+  const tier4ByParent = useMemo(() => {
+    const map = {};
+    const t4Set = new Set(tier4Nodes.map((n) => n.id));
+    edges.forEach((e) => {
+      if (t4Set.has(e.from)) {
+        if (!map[e.to]) map[e.to] = [];
+        const childNode = nodes.find((n) => n.id === e.from);
+        if (childNode && !map[e.to].some((c) => c.id === childNode.id)) {
+          map[e.to].push(childNode);
+        }
+      }
+    });
+    return map;
+  }, [edges, tier4Nodes, nodes]);
+
+  // Search filtering
+  const q = searchQuery.trim().toLowerCase();
+  const isMatch = (n) => {
+    if (!q) return false;
+    return (
+      n.name.toLowerCase().includes(q) ||
+      n.id.toLowerCase().includes(q) ||
+      (n.material && n.material.toLowerCase().includes(q))
+    );
+  };
+
+  const matchCount = useMemo(() => {
+    if (!q) return 0;
+    return nodes.filter(isMatch).length;
+  }, [nodes, q]);
+
+  // Node radius scaling with directTco2e
+  function getNodeRadius(tco2e) {
+    // sqrt scaling bounded between 6 and 22
+    return Math.max(6, Math.min(22, Math.round(Math.sqrt(tco2e || 0) * 0.45 + 6)));
+  }
+
+  const toggleParentExpand = (parentId) => {
+    setExpandedTier3((prev) => ({
+      ...prev,
+      [parentId]: !prev[parentId],
+    }));
+  };
+
+  const toggleAllExpand = () => {
+    const nextVal = !expandAllT4;
+    setExpandAllT4(nextVal);
+    const updated = {};
+    tier3Nodes.forEach((t3) => {
+      updated[t3.id] = nextVal;
+    });
+    setExpandedTier3(updated);
+  };
+
+  return (
+    <div style={{ background: "#181714", border: `1px solid ${COLOR.hairline}`, borderRadius: "6px", padding: "24px", color: COLOR.concrete }}>
+      {/* Controls Bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+        <div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: COLOR.concrete }}>
+            200-Supplier Layered Value Chain Graph (Left-to-Right by Tier)
+          </div>
+          <div style={{ fontSize: "14px", color: COLOR.concreteDim, marginTop: "2px" }}>
+            Node radius scales with direct tCO2e &middot; Dashed outline indicates imputed energy &middot; Click any supplier for Audit Drill-Down
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+          {/* Search Box */}
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              placeholder="Search 200 suppliers by name or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                padding: "8px 14px",
+                borderRadius: "4px",
+                border: `1px solid ${COLOR.hairlineOnDark}`,
+                background: "#242320",
+                color: COLOR.concrete,
+                fontSize: "14px",
+                width: "280px",
+              }}
+            />
+            {q && (
+              <span style={{ position: "absolute", right: "10px", top: "8px", fontSize: "13px", color: COLOR.rustBright, fontWeight: 600 }}>
+                {matchCount} found
+              </span>
+            )}
+          </div>
+
+          {/* Tier 4 Global Expand Toggle */}
+          <button
+            onClick={toggleAllExpand}
+            style={{
+              padding: "8px 16px",
+              background: expandAllT4 ? COLOR.rust : "rgba(237,234,227,0.12)",
+              color: COLOR.concrete,
+              border: `1px solid ${COLOR.hairlineOnDark}`,
+              borderRadius: "4px",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {expandAllT4 ? "Collapse All Tier 4 Groups" : "Expand All Tier 4 (92 Nodes)"}
+          </button>
+        </div>
+      </div>
+
+      {/* Graph Legend */}
+      <div
+        style={{
+          display: "flex",
+          gap: "20px",
+          alignItems: "center",
+          flexWrap: "wrap",
+          padding: "10px 16px",
+          background: "#211F1B",
+          borderRadius: "4px",
+          fontSize: "14px",
+          marginBottom: "16px",
+          border: `1px solid ${COLOR.hairlineOnDark}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ width: "12px", height: "12px", borderRadius: "50%", background: COLOR.tealBright }} />
+          <span>Reported Energy</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ width: "12px", height: "12px", borderRadius: "50%", background: COLOR.rustBright, border: "2px dashed #FFF" }} />
+          <span>Imputed Energy (Dashed Outline)</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ width: "16px", height: "16px", borderRadius: "50%", border: "2px solid #FFB800", background: "transparent" }} />
+          <span>Search Match Highlight</span>
+        </div>
+        <div style={{ marginLeft: "auto", fontSize: "14px", color: COLOR.concreteDim }}>
+          Tier Breakdown: T4 (92) &rarr; T3 (74) &rarr; T2 (26) &rarr; T1 (8) &rarr; OEM Focal
+        </div>
+      </div>
+
+      {/* Scrollable Graph Canvas */}
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "640px", background: "#12110F", borderRadius: "6px", padding: "20px", border: `1px solid ${COLOR.hairlineStrong}` }}>
+        <div style={{ display: "grid", gridTemplateColumns: "240px 240px 220px 200px 160px", gap: "24px", minWidth: "1100px" }}>
+          {/* Column 1: Tier 4 (Sub-suppliers / Aggregates) */}
+          <div>
+            <div style={{ padding: "8px 12px", background: "#211F1B", borderRadius: "4px", fontWeight: 700, fontSize: "14px", marginBottom: "12px", color: COLOR.concreteDim, borderBottom: `2px solid ${COLOR.rust}` }}>
+              Tier 4: Sub-Tier Sources ({tier4Nodes.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {tier3Nodes.map((t3) => {
+                const children = tier4ByParent[t3.id] || [];
+                if (children.length === 0) return null;
+                const isExpanded = !!expandedTier3[t3.id] || expandAllT4;
+                const totalChildrenTco2e = children.reduce((s, c) => s + c.directTco2e, 0);
+
+                return (
+                  <div key={`t4-grp-${t3.id}`} style={{ border: `1px solid ${COLOR.hairlineOnDark}`, borderRadius: "4px", padding: "8px 10px", background: "#1C1B18" }}>
+                    <div
+                      onClick={() => toggleParentExpand(t3.id)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        cursor: "pointer",
+                        fontSize: "13.5px",
+                        fontWeight: 600,
+                        color: COLOR.concrete,
+                      }}
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: COLOR.rustBright }}>{isExpanded ? "▼" : "▶"}</span>
+                        <span>{t3.id} group</span>
+                      </span>
+                      <span style={{ fontSize: "13px", padding: "2px 6px", background: "rgba(200, 87, 40, 0.2)", color: COLOR.rustBright, borderRadius: "3px" }}>
+                        {children.length} sub-nodes ({formatDec(totalChildrenTco2e, 1)} t)
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px", paddingLeft: "10px", borderLeft: `2px solid ${COLOR.rust}` }}>
+                        {children.map((child) => {
+                          const matched = isMatch(child);
+                          const isSelected = selectedSupplierId === child.id;
+                          const r = getNodeRadius(child.directTco2e);
+
+                          return (
+                            <div
+                              key={child.id}
+                              onClick={() => onSelectSupplier(child.id)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                padding: "6px 8px",
+                                background: isSelected ? "#361611" : matched ? "rgba(255, 184, 0, 0.15)" : "#242320",
+                                border: `1px solid ${isSelected ? COLOR.rustBright : matched ? "#FFB800" : child.energyImputed ? COLOR.rust : COLOR.hairlineOnDark}`,
+                                borderStyle: child.energyImputed ? "dashed" : "solid",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                transition: "all 150ms ease",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: `${r * 1.4}px`,
+                                  height: `${r * 1.4}px`,
+                                  borderRadius: "50%",
+                                  background: child.energyImputed ? COLOR.rust : COLOR.tealBright,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                <div style={{ fontSize: "13.5px", fontWeight: 600, color: COLOR.concrete }}>
+                                  {child.name}
+                                </div>
+                                <div style={{ fontSize: "12.5px", color: COLOR.concreteDim, fontFamily: "'IBM Plex Mono', monospace" }}>
+                                  {child.id} &middot; {formatDec(child.directTco2e)} t
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 2: Tier 3 Nodes (74 suppliers) */}
+          <div>
+            <div style={{ padding: "8px 12px", background: "#211F1B", borderRadius: "4px", fontWeight: 700, fontSize: "14px", marginBottom: "12px", color: COLOR.concreteDim, borderBottom: `2px solid ${COLOR.rustBright}` }}>
+              Tier 3: Extraction / Smelting ({tier3Nodes.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "560px", overflowY: "auto" }}>
+              {tier3Nodes.map((n) => {
+                const matched = isMatch(n);
+                const isSelected = selectedSupplierId === n.id;
+                const r = getNodeRadius(n.directTco2e);
+
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => onSelectSupplier(n.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "8px 10px",
+                      background: isSelected ? "#361611" : matched ? "rgba(255, 184, 0, 0.18)" : "#1C1B18",
+                      border: `1px solid ${isSelected ? COLOR.rustBright : matched ? "#FFB800" : n.energyImputed ? COLOR.rust : COLOR.hairlineOnDark}`,
+                      borderStyle: n.energyImputed ? "dashed" : "solid",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: `${r * 1.5}px`,
+                        height: `${r * 1.5}px`,
+                        borderRadius: "50%",
+                        background: n.energyImputed ? COLOR.rust : COLOR.tealBright,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: COLOR.concrete }}>
+                        {n.name}
+                      </div>
+                      <div style={{ fontSize: "13px", color: COLOR.concreteDim, fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {n.id} &middot; {formatDec(n.directTco2e)} t &middot; {MATERIAL_LABEL[n.material] || n.material}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 3: Tier 2 Nodes (26 suppliers) */}
+          <div>
+            <div style={{ padding: "8px 12px", background: "#211F1B", borderRadius: "4px", fontWeight: 700, fontSize: "14px", marginBottom: "12px", color: COLOR.concreteDim, borderBottom: `2px solid ${COLOR.tealBright}` }}>
+              Tier 2: Processing ({tier2Nodes.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "560px", overflowY: "auto" }}>
+              {tier2Nodes.map((n) => {
+                const matched = isMatch(n);
+                const isSelected = selectedSupplierId === n.id;
+                const r = getNodeRadius(n.directTco2e);
+
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => onSelectSupplier(n.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "8px 10px",
+                      background: isSelected ? "#361611" : matched ? "rgba(255, 184, 0, 0.18)" : "#1C1B18",
+                      border: `1px solid ${isSelected ? COLOR.rustBright : matched ? "#FFB800" : n.energyImputed ? COLOR.rust : COLOR.hairlineOnDark}`,
+                      borderStyle: n.energyImputed ? "dashed" : "solid",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: `${r * 1.5}px`,
+                        height: `${r * 1.5}px`,
+                        borderRadius: "50%",
+                        background: n.energyImputed ? COLOR.rust : COLOR.tealBright,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: COLOR.concrete }}>
+                        {n.name}
+                      </div>
+                      <div style={{ fontSize: "13px", color: COLOR.concreteDim, fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {n.id} &middot; {formatDec(n.directTco2e)} t
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 4: Tier 1 Direct Suppliers (8 suppliers) */}
+          <div>
+            <div style={{ padding: "8px 12px", background: "#211F1B", borderRadius: "4px", fontWeight: 700, fontSize: "14px", marginBottom: "12px", color: COLOR.concreteDim, borderBottom: `2px solid ${COLOR.tealBright}` }}>
+              Tier 1: Direct ({tier1Nodes.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {tier1Nodes.map((n) => {
+                const matched = isMatch(n);
+                const isSelected = selectedSupplierId === n.id;
+                const r = getNodeRadius(n.directTco2e);
+
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => onSelectSupplier(n.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 12px",
+                      background: isSelected ? "#361611" : matched ? "rgba(255, 184, 0, 0.18)" : "#1C1B18",
+                      border: `1px solid ${isSelected ? COLOR.rustBright : matched ? "#FFB800" : n.energyImputed ? COLOR.rust : COLOR.hairlineOnDark}`,
+                      borderStyle: n.energyImputed ? "dashed" : "solid",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: `${r * 1.5}px`,
+                        height: `${r * 1.5}px`,
+                        borderRadius: "50%",
+                        background: n.energyImputed ? COLOR.rust : COLOR.tealBright,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: COLOR.concrete }}>
+                        {n.name}
+                      </div>
+                      <div style={{ fontSize: "13px", color: COLOR.concreteDim, fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {n.id} &middot; {formatDec(n.directTco2e)} t
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 5: OEM Focal Plant */}
+          <div>
+            <div style={{ padding: "8px 12px", background: "#211F1B", borderRadius: "4px", fontWeight: 700, fontSize: "14px", marginBottom: "12px", color: COLOR.concreteDim, borderBottom: `2px solid #FFF` }}>
+              Enterprise OEM
+            </div>
+            <div
+              style={{
+                background: "#242320",
+                border: `2px solid ${COLOR.concrete}`,
+                borderRadius: "6px",
+                padding: "16px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: COLOR.tealBright, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
+                🏭
+              </div>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: COLOR.concrete }}>
+                Focal Manufacturer
+              </div>
+              <div style={{ fontSize: "13px", color: COLOR.concreteDim, marginTop: "4px" }}>
+                Assembly Plant (Scope 3 Hub)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section 4: Circular Sourcing Hub & What-If Projection Engine       */
+/* ------------------------------------------------------------------ */
+
+function CircularSourcingHub({ nodes, alternatives, selectedSupplierId, onSelectSupplier }) {
+  // Use selected supplier or fallback to top directTco2e node
+  const activeSupplier = useMemo(() => {
+    if (selectedSupplierId) {
+      const found = nodes.find((n) => n.id === selectedSupplierId);
+      if (found) return found;
+    }
+    return nodes[0] || null;
+  }, [nodes, selectedSupplierId]);
+
+  if (!activeSupplier) return null;
+
+  // Match supplier material and transportMode against alternatives
+  const materialAlt = (alternatives || []).find((a) => a.from === activeSupplier.material);
+  const transportAlt = (alternatives || []).find((a) => a.from === activeSupplier.transportMode);
+
+  // Compute Cat 1 and Cat 4 emissions from auditLines
+  const cat1Line = (activeSupplier.auditLines || []).find((l) => l.category.includes("Cat 1") || l.category.includes("goods"));
+  const cat4Line = (activeSupplier.auditLines || []).find((l) => l.category.includes("Cat 4") || l.category.includes("transport"));
+
+  const cat1Emissions = cat1Line ? cat1Line.kgco2e / 1000 : activeSupplier.directTco2e * 0.6;
+  const cat4Emissions = cat4Line ? cat4Line.kgco2e / 1000 : activeSupplier.directTco2e * 0.2;
+
+  // Material Swap Calculations
+  const matReductionPct = materialAlt ? materialAlt.reductionPct : 0;
+  const matCurrentTonnes = cat1Emissions;
+  const matProjectedTonnes = matCurrentTonnes * (1 - matReductionPct / 100);
+  const matDelta = matCurrentTonnes - matProjectedTonnes;
+
+  // Freight Swap Calculations
+  const transReductionPct = transportAlt ? transportAlt.reductionPct : 0;
+  const transCurrentTonnes = cat4Emissions;
+  const transProjectedTonnes = transCurrentTonnes * (1 - transReductionPct / 100);
+  const transDelta = transCurrentTonnes - transProjectedTonnes;
+
+  const totalCurrent = matCurrentTonnes + transCurrentTonnes;
+  const totalProjected = matProjectedTonnes + transProjectedTonnes;
+  const totalAvoided = matDelta + transDelta;
+  const overallReductionPct = totalCurrent > 0 ? (totalAvoided / totalCurrent) * 100 : 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Disclaimer Banner - Modelled Projection */}
+      <div
+        style={{
+          background: "linear-gradient(135deg, #1C1B18 0%, #2A2621 100%)",
+          border: `1px solid ${COLOR.rustBright}`,
+          borderRadius: "6px",
+          padding: "20px 24px",
+          color: COLOR.concrete,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "16px",
+        }}
+      >
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.08em", color: COLOR.rustBright, textTransform: "uppercase" }}>
+              Circular Decarbonization Sandbox
+            </span>
+            <span
+              style={{
+                fontSize: "13px",
+                fontWeight: 700,
+                padding: "3px 10px",
+                borderRadius: "3px",
+                background: COLOR.amberLight,
+                color: "#FFB800",
+                border: "1px solid #FFB800",
+              }}
+            >
+              PROJECTION (MODELLED POTENTIAL &middot; NOT MEASURED)
+            </span>
+          </div>
+          <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "6px" }}>
+            Circular Sourcing Feasibility for {activeSupplier.name} ({activeSupplier.id})
+          </div>
+          <div style={{ fontSize: "14px", color: COLOR.concreteDim, marginTop: "4px" }}>
+            Evaluating closed-loop material substitution and low-carbon freight modal shifts from static benchmarks.
+          </div>
+        </div>
+
+        <div style={{ textAlign: "right", background: "rgba(168, 71, 31, 0.2)", padding: "12px 20px", borderRadius: "4px", border: `1px solid ${COLOR.rust}` }}>
+          <div style={{ fontSize: "13px", color: COLOR.concreteDim, textTransform: "uppercase", fontWeight: 600 }}>Total Modelled Avoidance</div>
+          <div style={{ fontSize: "28px", fontWeight: 800, color: COLOR.rustBright, fontFamily: "'IBM Plex Mono', monospace" }}>
+            -{formatDec(totalAvoided, 2)} tCO2e
+          </div>
+          <div style={{ fontSize: "13px", color: COLOR.tealBright, fontWeight: 600 }}>
+            {formatDec(overallReductionPct, 1)}% projected reduction
+          </div>
+        </div>
+      </div>
+
+      {/* Supplier Selector Quick Switcher */}
+      <div className="cad-panel" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "14px", fontWeight: 600, color: COLOR.ink }}>Selected Supplier:</span>
+        <select
+          value={activeSupplier.id}
+          onChange={(e) => onSelectSupplier(e.target.value)}
+          style={{
+            padding: "8px 12px",
+            fontSize: "14px",
+            borderRadius: "4px",
+            border: `1px solid ${COLOR.hairlineStrong}`,
+            background: COLOR.cardBg,
+            color: COLOR.ink,
+            fontWeight: 600,
+            maxWidth: "400px",
+          }}
+        >
+          {nodes.map((n) => (
+            <option key={n.id} value={n.id}>
+              {n.id} - {n.name} (Tier {n.tier}, {MATERIAL_LABEL[n.material] || n.material})
+            </option>
+          ))}
+        </select>
+        <span style={{ fontSize: "14px", color: COLOR.inkMuted }}>
+          Current direct emissions: <strong>{formatDec(activeSupplier.directTco2e)} tCO2e</strong>
+        </span>
+      </div>
+
+      {/* 2-Column Swap Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "20px" }}>
+        {/* Card 1: Material Substitution */}
+        <div className="cad-panel" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 700, color: COLOR.ink }}>
+                1. Material Closed-Loop Swap
+              </span>
+              {materialAlt ? (
+                <span style={{ fontSize: "13px", fontWeight: 700, color: COLOR.tealBright, background: "rgba(45,125,100,0.12)", padding: "2px 8px", borderRadius: "3px" }}>
+                  -{materialAlt.reductionPct}% Benchmark Factor
+                </span>
+              ) : (
+                <span style={{ fontSize: "13px", color: COLOR.inkMuted }}>No direct circular rule</span>
+              )}
+            </div>
+
+            <div style={{ fontSize: "14px", color: COLOR.inkSoft, lineHeight: 1.5, marginBottom: "16px" }}>
+              Current feed: <strong>{MATERIAL_LABEL[activeSupplier.material] || activeSupplier.material}</strong> ({formatNumber(activeSupplier.massKg)} kg annual mass).
+              {materialAlt && (
+                <span> Proposed transition: <strong>{MATERIAL_LABEL[materialAlt.to] || materialAlt.to}</strong>.</span>
+              )}
+            </div>
+
+            {/* Metrics grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", background: COLOR.concreteDim, padding: "14px", borderRadius: "4px", textAlign: "center" }}>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.inkMuted, fontWeight: 600 }}>Current</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.ink, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  {formatDec(matCurrentTonnes, 2)} t
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.inkMuted, fontWeight: 600 }}>Projected</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.teal, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  {formatDec(matProjectedTonnes, 2)} t
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.rustBright, fontWeight: 700 }}>Delta (Abated)</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.rustBright, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  -{formatDec(matDelta, 2)} t
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "16px", fontSize: "13px", color: COLOR.inkMuted, borderTop: `1px solid ${COLOR.hairline}`, paddingTop: "10px" }}>
+            * Modelled projection applied to Scope 3 Category 1 purchased goods process intensity.
+          </div>
+        </div>
+
+        {/* Card 2: Transport Modal Shift */}
+        <div className="cad-panel" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 700, color: COLOR.ink }}>
+                2. Freight Decarbonization Modal Shift
+              </span>
+              {transportAlt ? (
+                <span style={{ fontSize: "13px", fontWeight: 700, color: COLOR.tealBright, background: "rgba(45,125,100,0.12)", padding: "2px 8px", borderRadius: "3px" }}>
+                  -{transportAlt.reductionPct}% Benchmark Factor
+                </span>
+              ) : (
+                <span style={{ fontSize: "13px", color: COLOR.inkMuted }}>Standard modal configuration</span>
+              )}
+            </div>
+
+            <div style={{ fontSize: "14px", color: COLOR.inkSoft, lineHeight: 1.5, marginBottom: "16px" }}>
+              Current freight: <strong>{TRANSPORT_LABEL[activeSupplier.transportMode] || activeSupplier.transportMode}</strong>.
+              {transportAlt ? (
+                <span> Proposed transition: <strong>{TRANSPORT_LABEL[transportAlt.to] || transportAlt.to}</strong>.</span>
+              ) : (
+                <span> Low emission logistics benchmark active.</span>
+              )}
+            </div>
+
+            {/* Metrics grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", background: COLOR.concreteDim, padding: "14px", borderRadius: "4px", textAlign: "center" }}>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.inkMuted, fontWeight: 600 }}>Current</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.ink, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  {formatDec(transCurrentTonnes, 2)} t
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.inkMuted, fontWeight: 600 }}>Projected</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.teal, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  {formatDec(transProjectedTonnes, 2)} t
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "13px", color: COLOR.rustBright, fontWeight: 700 }}>Delta (Abated)</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: COLOR.rustBright, fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px" }}>
+                  -{formatDec(transDelta, 2)} t
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "16px", fontSize: "13px", color: COLOR.inkMuted, borderTop: `1px solid ${COLOR.hairline}`, paddingTop: "10px" }}>
+            * Modelled projection applied to Scope 3 Category 4 upstream freight DEFRA tonne-km factors.
+          </div>
+        </div>
+      </div>
+
+      {/* Available Transition Benchmarks Catalog */}
+      <div className="cad-panel" style={{ padding: "20px 24px" }}>
+        <div style={{ fontSize: "15px", fontWeight: 700, color: COLOR.ink, marginBottom: "8px" }}>
+          Supply Chain Decarbonization Alternatives Catalog (from dashboard.json)
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginTop: "12px" }}>
+          {(alternatives || []).map((alt, i) => (
+            <div key={i} style={{ background: COLOR.cardBg, border: `1px solid ${COLOR.hairlineStrong}`, padding: "14px 16px", borderRadius: "4px" }}>
+              <div style={{ fontSize: "13px", color: COLOR.inkMuted, fontWeight: 600 }}>Transition Pathway</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: COLOR.ink, marginTop: "4px" }}>
+                {MATERIAL_LABEL[alt.from] || TRANSPORT_LABEL[alt.from] || alt.from} &rarr;{" "}
+                <span style={{ color: COLOR.tealBright }}>{MATERIAL_LABEL[alt.to] || TRANSPORT_LABEL[alt.to] || alt.to}</span>
+              </div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: COLOR.rustBright, fontFamily: "'IBM Plex Mono', monospace", marginTop: "6px" }}>
+                -{alt.reductionPct}% Abatement
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Supplier Ledger Component                                         */
+/* ------------------------------------------------------------------ */
+
+function SupplierLedger({ nodes, onSelectSupplier, selectedSupplierId }) {
+  const [search, setSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState("all");
+  const [imputedFilter, setImputedFilter] = useState("all");
+
+  const filtered = useMemo(() => {
+    return nodes.filter((n) => {
+      if (tierFilter !== "all" && String(n.tier) !== tierFilter) return false;
+      if (imputedFilter === "imputed" && !n.energyImputed) return false;
+      if (imputedFilter === "reported" && n.energyImputed) return false;
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (
+        n.name.toLowerCase().includes(q) ||
+        n.id.toLowerCase().includes(q) ||
+        n.country.toLowerCase().includes(q) ||
+        (n.material && n.material.toLowerCase().includes(q))
+      );
+    });
+  }, [nodes, search, tierFilter, imputedFilter]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "16px" }}>
+        <input
+          type="text"
+          placeholder="Filter 200 suppliers by name, ID, country..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            padding: "8px 14px",
+            fontSize: "14px",
+            borderRadius: "4px",
+            border: `1px solid ${COLOR.hairlineStrong}`,
+            background: COLOR.cardBg,
+            color: COLOR.ink,
+            width: "300px",
+          }}
+        />
+
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value)}
+          style={{
+            padding: "8px 12px",
+            fontSize: "14px",
+            borderRadius: "4px",
+            border: `1px solid ${COLOR.hairlineStrong}`,
+            background: COLOR.cardBg,
+            color: COLOR.ink,
+          }}
+        >
+          <option value="all">All Tiers (1–4)</option>
+          <option value="1">Tier 1</option>
+          <option value="2">Tier 2</option>
+          <option value="3">Tier 3</option>
+          <option value="4">Tier 4</option>
+        </select>
+
+        <select
+          value={imputedFilter}
+          onChange={(e) => setImputedFilter(e.target.value)}
+          style={{
+            padding: "8px 12px",
+            fontSize: "14px",
+            borderRadius: "4px",
+            border: `1px solid ${COLOR.hairlineStrong}`,
+            background: COLOR.cardBg,
+            color: COLOR.ink,
+          }}
+        >
+          <option value="all">All Data Qualities</option>
+          <option value="reported">Reported Only</option>
+          <option value="imputed">Imputed / Proxy Only</option>
+        </select>
+
+        <div style={{ marginLeft: "auto", fontSize: "14px", color: COLOR.inkMuted }}>
+          Showing <strong>{filtered.length}</strong> of {nodes.length} suppliers
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ overflowY: "auto", flex: 1, border: `1px solid ${COLOR.hairline}`, borderRadius: "4px", background: COLOR.cardBg }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+          <thead>
+            <tr style={{ background: COLOR.panel, borderBottom: `2px solid ${COLOR.hairlineStrong}`, color: COLOR.ink }}>
+              <th style={{ padding: "12px 14px" }}>ID</th>
+              <th style={{ padding: "12px 14px" }}>Supplier Name</th>
+              <th style={{ padding: "12px 14px" }}>Tier</th>
+              <th style={{ padding: "12px 14px" }}>Country</th>
+              <th style={{ padding: "12px 14px" }}>Material</th>
+              <th style={{ padding: "12px 14px" }}>Spend (USD)</th>
+              <th style={{ padding: "12px 14px" }}>Direct tCO2e</th>
+              <th style={{ padding: "12px 14px" }}>Energy Status</th>
+              <th style={{ padding: "12px 14px", textAlign: "right" }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => {
+              const isSelected = selectedSupplierId === r.id;
+              return (
+                <tr
+                  key={r.id}
+                  onClick={() => onSelectSupplier(r.id)}
+                  style={{
+                    borderBottom: `1px solid ${COLOR.hairline}`,
+                    background: isSelected ? "rgba(168,71,31,0.08)" : "transparent",
+                    cursor: "pointer",
+                    transition: "background 150ms ease",
+                  }}
+                >
+                  <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: COLOR.ink }}>
+                    {r.id}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontWeight: 600, color: COLOR.ink }}>{r.name}</td>
+                  <td style={{ padding: "12px 14px", color: COLOR.ink }}>Tier {r.tier}</td>
+                  <td style={{ padding: "12px 14px", color: COLOR.ink }}>{r.country}</td>
+                  <td style={{ padding: "12px 14px", color: COLOR.ink }}>
+                    {MATERIAL_LABEL[r.material] || r.material}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", color: COLOR.ink }}>
+                    {formatCurrency(r.spendUsd)}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: COLOR.rust }}>
+                    {formatDec(r.directTco2e)}
+                  </td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        padding: "3px 8px",
+                        borderRadius: "3px",
+                        background: r.energyImputed ? COLOR.amberLight : "rgba(45,125,100,0.12)",
+                        color: r.energyImputed ? COLOR.rustBright : COLOR.tealBright,
+                        border: `1px solid ${r.energyImputed ? COLOR.rust : COLOR.tealBright}`,
+                      }}
+                    >
+                      {r.energyImputed ? "IMPUTED" : "REPORTED"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectSupplier(r.id);
+                      }}
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        padding: "5px 10px",
+                        background: COLOR.ink,
+                        color: COLOR.concrete,
+                        border: "none",
+                        borderRadius: "3px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Audit &rarr;
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main Application Component                                         */
+/* ------------------------------------------------------------------ */
+
+export default function CarbonAuditDashboard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "network" | "circular" | "ledger"
+  const [selectedSupplierId, setSelectedSupplierId] = useState(null);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+
+  const fetchData = () => {
+    setLoading(true);
+    setError(null);
+
+    // Primary attempt: /dashboard.json
+    fetch("/dashboard.json")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch /dashboard.json`);
+        return res.json();
+      })
+      .then((json) => {
+        setData(json);
+        setLoading(false);
+      })
+      .catch((err) => {
+        // Fallback attempt: relative dashboard.json
+        fetch("dashboard.json")
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}: Failed fallback fetch`);
+            return res.json();
+          })
+          .then((json) => {
+            setData(json);
+            setLoading(false);
+          })
+          .catch((fallbackErr) => {
+            setError(fallbackErr.message || err.message);
+            setLoading(false);
+          });
+      });
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Handle supplier selection and modal trigger
+  const handleSelectSupplier = (supplierId) => {
+    if (!supplierId) return;
+    setSelectedSupplierId(supplierId);
+    setAuditModalOpen(true);
+  };
+
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+
+  if (error || !data) {
+    return <ErrorDisplay message={error} onRetry={fetchData} />;
+  }
+
+  const { meta, totals, blindSpot, hotspots, nodes, edges, alternatives } = data;
+  const selectedSupplier = nodes.find((n) => n.id === selectedSupplierId) || null;
+
+  return (
+    <div style={{ background: COLOR.concrete, minHeight: "100vh", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; }
+        body { font-size: 14px; color: #211F1B; }
+        input:focus, select:focus { outline: 2px solid ${COLOR.rust}; }
+        button:focus-visible { outline: 2px solid ${COLOR.rust}; }
+
+        .cad-header { padding: 24px 32px 0; background: ${COLOR.ink}; color: ${COLOR.concrete}; }
+        .cad-main { padding: 24px 32px 48px; }
+        .cad-panel { border: 1px solid ${COLOR.hairline}; background: ${COLOR.panel}; border-radius: 6px; }
+        .cad-tab-active { border-bottom: 3px solid ${COLOR.rustBright} !important; color: #FFF !important; }
+      `}</style>
+
+      {/* Header & Hero */}
+      <div className="cad-header">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
+          <div>
+            <div style={{ fontSize: "14px", letterSpacing: "0.1em", textTransform: "uppercase", color: COLOR.concreteDim, fontWeight: 600 }}>
+              {meta ? meta.company : "Corporate Scope 3 Value Chain"} &middot; Auditable Supply Chain Accounting
+            </div>
+            <div style={{ fontFamily: "'Archivo Expanded', sans-serif", fontSize: "clamp(30px, 4vw, 48px)", fontWeight: 800, marginTop: "4px", lineHeight: 1.1 }}>
+              {formatDec(totals.tco2e, 1)}
+              <span style={{ fontSize: "clamp(16px, 2vw, 22px)", fontWeight: 600, color: COLOR.rustBright, marginLeft: "12px" }}>
+                tCO2e Total
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ background: "rgba(237,234,227,0.1)", padding: "10px 16px", borderRadius: "4px", border: `1px solid ${COLOR.hairlineOnDark}` }}>
+              <div style={{ fontSize: "13px", color: COLOR.concreteDim, textTransform: "uppercase" }}>Suppliers & Relationships</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace" }}>
+                {meta ? meta.suppliers : nodes.length} Nodes &middot; {meta ? meta.relationships : edges.length} Links
+              </div>
+            </div>
+
+            <div style={{ background: "rgba(237,234,227,0.1)", padding: "10px 16px", borderRadius: "4px", border: `1px solid ${COLOR.hairlineOnDark}` }}>
+              <div style={{ fontSize: "13px", color: COLOR.concreteDim, textTransform: "uppercase" }}>Imputed Share</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: COLOR.rustBright }}>
+                {(totals.imputedShare * 100).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Signature Blind Spot Panel */}
+        <BlindSpotPanel blindSpot={blindSpot} />
+
+        {/* Tab Navigation */}
+        <div style={{ display: "flex", gap: "28px", borderTop: `1px solid ${COLOR.hairlineOnDark}`, marginTop: "16px" }}>
+          {[
+            { id: "overview", label: "Scope 3 Audit Overview" },
+            { id: "network", label: `Value Chain Graph (${nodes.length} Nodes)` },
+            { id: "circular", label: "Circular Sourcing Engine" },
+            { id: "ledger", label: `Supplier Ledger (${nodes.length})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={activeTab === tab.id ? "cad-tab-active" : ""}
+              style={{
+                background: "transparent",
+                border: "none",
+                borderBottom: "3px solid transparent",
+                padding: "16px 4px",
+                fontSize: "15px",
+                fontWeight: 600,
+                color: COLOR.concreteDim,
+                cursor: "pointer",
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                transition: "all 150ms ease",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main View Content */}
+      <div className="cad-main">
+        {/* Tab 1: Scope 3 Audit Overview */}
+        {activeTab === "overview" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            {/* Category KPI Cards Row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              {Object.entries(totals.byCategory || {}).map(([catName, catVal], i) => (
+                <div key={i} className="cad-panel" style={{ padding: "20px 24px" }}>
+                  <div style={{ fontSize: "13.5px", color: COLOR.inkMuted, fontWeight: 700, textTransform: "uppercase" }}>
+                    {catName}
+                  </div>
+                  <div style={{ fontSize: "26px", fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: COLOR.ink, marginTop: "6px" }}>
+                    {formatDec(catVal, 1)} tCO2e
+                  </div>
+                  <div style={{ fontSize: "14px", color: COLOR.inkMuted, marginTop: "4px" }}>
+                    Share: <strong>{((catVal / totals.tco2e) * 100).toFixed(1)}%</strong> of total carbon footprint
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Top 10 Carbon Hotspots Table */}
+            <div className="cad-panel" style={{ padding: "24px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <div>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: COLOR.ink }}>
+                    Priority Hotspot Suppliers (Top 10 Contributors)
+                  </div>
+                  <div style={{ fontSize: "14px", color: COLOR.inkMuted, marginTop: "2px" }}>
+                    Directly responsible for the largest share of Scope 3 emissions. Click any row for audit trace.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${COLOR.hairlineStrong}`, background: COLOR.concreteDim }}>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>ID</th>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>Supplier Name</th>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>Tier</th>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>Direct tCO2e</th>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>Share of Total</th>
+                      <th style={{ padding: "12px 14px", color: COLOR.ink }}>Energy Status</th>
+                      <th style={{ padding: "12px 14px", textAlign: "right", color: COLOR.ink }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(hotspots || []).map((h) => (
+                      <tr
+                        key={h.id}
+                        onClick={() => handleSelectSupplier(h.id)}
+                        style={{
+                          borderBottom: `1px solid ${COLOR.hairline}`,
+                          cursor: "pointer",
+                          transition: "background 150ms ease",
+                        }}
+                      >
+                        <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: COLOR.ink }}>
+                          {h.id}
+                        </td>
+                        <td style={{ padding: "12px 14px", fontWeight: 600, color: COLOR.ink }}>{h.name}</td>
+                        <td style={{ padding: "12px 14px", color: COLOR.ink }}>Tier {h.tier}</td>
+                        <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: COLOR.rust }}>
+                          {formatDec(h.directTco2e)}
+                        </td>
+                        <td style={{ padding: "12px 14px", fontFamily: "'IBM Plex Mono', monospace", color: COLOR.ink }}>
+                          {(h.shareOfTotal * 100).toFixed(2)}%
+                        </td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              padding: "3px 8px",
+                              borderRadius: "3px",
+                              background: h.energyImputed ? COLOR.amberLight : "rgba(45,125,100,0.12)",
+                              color: h.energyImputed ? COLOR.rustBright : COLOR.tealBright,
+                              border: `1px solid ${h.energyImputed ? COLOR.rust : COLOR.tealBright}`,
+                            }}
+                          >
+                            {h.energyImputed ? "IMPUTED" : "REPORTED"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectSupplier(h.id);
+                            }}
+                            style={{
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              padding: "6px 12px",
+                              background: COLOR.ink,
+                              color: COLOR.concrete,
+                              border: "none",
+                              borderRadius: "3px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Audit Lines &rarr;
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Value Chain Graph (200 Nodes) */}
+        {activeTab === "network" && (
+          <MultiTierFlowVisualizer
+            nodes={nodes}
+            edges={edges}
+            onSelectSupplier={handleSelectSupplier}
+            selectedSupplierId={selectedSupplierId}
+          />
+        )}
+
+        {/* Tab 3: Circular Sourcing Hub */}
+        {activeTab === "circular" && (
+          <CircularSourcingHub
+            nodes={nodes}
+            alternatives={alternatives}
+            selectedSupplierId={selectedSupplierId}
+            onSelectSupplier={handleSelectSupplier}
+          />
+        )}
+
+        {/* Tab 4: Auditable Supplier Ledger */}
+        {activeTab === "ledger" && (
+          <div className="cad-panel" style={{ padding: "24px", height: "680px" }}>
+            <SupplierLedger
+              nodes={nodes}
+              onSelectSupplier={handleSelectSupplier}
+              selectedSupplierId={selectedSupplierId}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Section 1: Modal Audit Drill-Down */}
+      <AuditProvenanceModal
+        supplier={selectedSupplier}
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
+      />
+    </div>
+  );
+}
