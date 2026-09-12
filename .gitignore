@@ -1,6 +1,9 @@
 node_modules
 dist
 dist-ssr
+__pycache__
+*.pyc
+.venv
 *.local
 .vscode/*
 !.vscode/extensions.json

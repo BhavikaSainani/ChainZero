@@ -127,10 +127,10 @@ function ErrorDisplay({ message, onRetry }) {
           Ingestion Failure &middot; Missing Data Source
         </div>
         <div style={{ fontSize: "22px", fontWeight: 700, color: COLOR.ink, marginTop: "8px" }}>
-          Unable to Load dashboard.json
+          Unable to Reach the Carbon Engine API
         </div>
         <div style={{ fontSize: "15px", color: COLOR.inkMuted, marginTop: "12px", lineHeight: 1.6 }}>
-          {message || "The static supply chain data file could not be read. Please ensure public/dashboard.json exists and is reachable."}
+          {message || "The live pipeline at /api/dashboard could not be reached. Make sure the FastAPI backend is running (uvicorn backend.main:app --port 8000)."}
         </div>
         <div style={{ marginTop: "24px", display: "flex", gap: "12px" }}>
           <button
@@ -1454,10 +1454,11 @@ export default function CarbonAuditDashboard() {
     setLoading(true);
     setError(null);
 
-    // Primary attempt: /dashboard.json
-    fetch("/dashboard.json")
+    // The engine runs live on every load - Ingest -> Calculate -> Propagate
+    // -> Diagnose all happen server-side, nothing here is a cached export.
+    fetch("/api/dashboard")
       .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch /dashboard.json`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch /api/dashboard`);
         return res.json();
       })
       .then((json) => {
@@ -1465,20 +1466,8 @@ export default function CarbonAuditDashboard() {
         setLoading(false);
       })
       .catch((err) => {
-        // Fallback attempt: relative dashboard.json
-        fetch("dashboard.json")
-          .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}: Failed fallback fetch`);
-            return res.json();
-          })
-          .then((json) => {
-            setData(json);
-            setLoading(false);
-          })
-          .catch((fallbackErr) => {
-            setError(fallbackErr.message || err.message);
-            setLoading(false);
-          });
+        setError(err.message);
+        setLoading(false);
       });
   };
 
@@ -1548,6 +1537,27 @@ export default function CarbonAuditDashboard() {
                 {(totals.imputedShare * 100).toFixed(1)}%
               </div>
             </div>
+
+            <a
+              href="/api/export/audit.csv"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 18px",
+                background: COLOR.rustBright,
+                color: "#FFF",
+                border: "none",
+                borderRadius: "4px",
+                fontSize: "14px",
+                fontWeight: 700,
+                cursor: "pointer",
+                textDecoration: "none",
+                alignSelf: "center",
+              }}
+            >
+              Auditor Export (CSV) &darr;
+            </a>
           </div>
         </div>
 
